@@ -1,33 +1,30 @@
-import express from "express";
-import ytdl from "ytdl-core";
+const express = require('express');
+const ytdl = require('ytdl-core');
 
 const app = express();
+const PORT = process.env.PORT || 3000;
 
-// Home route
-app.get("/", (req, res) => {
-  res.send("✅ YouTube Audio API Working!");
-});
+app.get('/download', async (req, res) => {
+  const videoUrl = req.query.videoUrl;
+  if (!videoUrl || !ytdl.validateURL(videoUrl)) {
+    return res.status(400).json({ error: 'Invalid or missing videoUrl parameter' });
+  }
 
-// YouTube audio route
-app.get("/ytaudio", async (req, res) => {
   try {
-    const id = req.query.id;
-    if (!id) return res.status(400).json({ error: "Missing YouTube video ID" });
+    const info = await ytdl.getInfo(videoUrl);
+    const format = ytdl.chooseFormat(info.formats, { quality: 'highestvideo' });
+    if (!format) {
+      return res.status(404).json({ error: 'No suitable format found' });
+    }
 
-    const url = `https://www.youtube.com/watch?v=${id}`;
-    const info = await ytdl.getInfo(url);
-
-    const audioFormat = ytdl.chooseFormat(info.formats, { quality: "highestaudio" });
-    res.json({
-      title: info.videoDetails.title,
-      author: info.videoDetails.author.name,
-      lengthSeconds: info.videoDetails.lengthSeconds,
-      audioUrl: audioFormat.url
-    });
-  } catch (e) {
-    res.status(500).json({ error: e.message });
+    res.header('Content-Disposition', `attachment; filename="${info.videoDetails.title}.mp4"`);
+    res.header('Content-Type', 'video/mp4');
+    ytdl(videoUrl, { format }).pipe(res);
+  } catch (error) {
+    res.status(500).json({ error: error.message || 'Internal Server Error' });
   }
 });
 
-// Export app for Vercel
-export default app;
+app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
+});
